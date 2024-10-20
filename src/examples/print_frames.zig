@@ -1,9 +1,8 @@
 const std = @import("std");
-const gifany = @import("./lib/gifany/gif.zig");
-
+const gifany = @import("gifany");
 
 pub fn main() !void {
-    const path = "/home/bauer/projects/giffer/src/static/earth_sample.gif";
+    const path = "/home/bauer/projects/gifany/src/static/earth_sample.gif";
     const file = try std.fs.openFileAbsolute(path, .{ .mode = .read_only });
     defer file.close();
 
@@ -15,10 +14,10 @@ pub fn main() !void {
     const data = try decoder.decode();
 
     for (0..data.frames.?.len) |index| {
-        switch (data.frames.?[index]) {
-            .Ext => std.debug.print("data:\n  {}\n", .{data.frames.?[index].Ext}),
-            .Image => std.debug.print("data:\n  {}\n", .{data.frames.?[index].Image}),
-        }
+        std.debug.print("frame #{}:\n    {}\n", .{
+            index,
+            data.frames.?[index],
+        });
     }
 }
 

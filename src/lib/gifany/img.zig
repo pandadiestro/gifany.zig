@@ -27,8 +27,6 @@ pub fn readImage(reader: *const std.io.AnyReader) !Image {
         .descriptor = try reader.readStruct(ImageDescriptor),
     };
 
-    std.debug.print("is there a local table? {}\n", .{ try new_image.getLocalTableFlag() == 1 });
-
     return new_image;
 }
 

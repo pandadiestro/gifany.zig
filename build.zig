@@ -21,11 +21,19 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     const exe = b.addExecutable(.{
-        .name = "giffer",
-        .root_source_file = b.path("src/main.zig"),
+        .name = "gifany",
+        .root_source_file = b.path("src/examples/print_frames.zig"),
         .target = target,
         .optimize = optimize,
     });
+
+    const giffany_module = b.addModule("gifany", .{
+        .root_source_file = b.path("./src/lib/gifany/gif.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    exe.root_module.addImport("gifany", giffany_module);
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
@@ -33,11 +41,13 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(exe);
 
     const exe_check = b.addExecutable(.{
-        .name = "giffer",
-        .root_source_file = b.path("src/main.zig"),
+        .name = "gifany",
+        .root_source_file = b.path("src/examples/print_frames.zig"),
         .target = target,
         .optimize = optimize,
     });
+
+    exe_check.root_module.addImport("gifany", giffany_module);
 
     const check = b.step("check", "Check if foo compiles");
     check.dependOn(&exe_check.step);
@@ -68,7 +78,7 @@ pub fn build(b: *std.Build) void {
     // Creates a step for unit testing. This only builds the test executable
     // but does not run it.
     const exe_unit_tests = b.addTest(.{
-        .root_source_file = b.path("src/main.zig"),
+        .root_source_file = b.path("src/examples/print_frames.zig"),
         .target = target,
         .optimize = optimize,
     });

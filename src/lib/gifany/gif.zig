@@ -1,8 +1,7 @@
 const std = @import("std");
 const img = @import("img.zig");
+const ext = @import("ext.zig");
 const color = @import("color.zig");
-
-const RGBColor = color.RGBColor;
 
 /// Main gif header data (up to but not including the global color table)
 pub const GifHeader = extern struct {
@@ -24,7 +23,6 @@ pub const GifHeader = extern struct {
         bgcolor_index: u8 = 0,
         pixel_aspratio: u8 = 0,
 
-
         fn getGctableFlag(self: Self) u8 {
             return self.packed_fields & 0b10000000;
         }
@@ -38,135 +36,106 @@ pub const GifHeader = extern struct {
     ls_descriptor: LSDescriptor = .{},
 };
 
-pub const ExtType = enum(u8) {
-    Graphic = 0xf9,
-    PlainText = 0x01,
-    Application = 0xff,
-    Comment = 0xfe,
-};
-
-pub const Extension = struct {
-    label: ExtType,
-    data: [][]u8,
-};
-
-const ImageOrExtType = enum(u8) {
-    Image = 0x2c,
-    Ext = 0x21,
-};
-
-const ImageOrExt = union(ImageOrExtType) {
-    Image: img.Image,
-    Ext: Extension,
-};
-
 pub const GifData = struct {
-    const GifValidateError = error {
+    const GifValidateError = error{
         NotAGif,
         NotSupported,
     };
 
     const Self = @This();
 
-    main_header: GifHeader,
-    global_colortable: ?[]RGBColor = null,
-    frames: ?[]ImageOrExt = null,
+    main_header: GifHeader = .{},
+    global_colortable: ?[]color.RGBColor = null,
+    extensions: ?[]ext.Extension = null,
+    frames: ?[]img.Image = null,
 
-    fn validate(self: *Self) GifValidateError!void {
-        if (!std.mem.eql(u8, "GIF", &self.main_header.header.signature)) {
+    fn readHeader(self: *Self, reader: *const std.io.AnyReader) !void {
+        const new_header = try reader.readStruct(GifHeader);
+
+        if (!std.mem.eql(u8, "GIF", &new_header.header.signature)) {
             return GifValidateError.NotAGif;
         }
 
-        if (self.main_header.header.version[0] != '8' or self.main_header.header.version[2] != 'a') {
-            return GifValidateError.NotSupported;
-        } if (self.main_header.header.version[1] != '9' and self.main_header.header.version[1] != '7') {
+        if (new_header.header.version[0] != '8' or new_header.header.version[2] != 'a') {
             return GifValidateError.NotSupported;
         }
+
+        if (new_header.header.version[1] != '9' and new_header.header.version[1] != '7') {
+            return GifValidateError.NotSupported;
+        }
+
+        self.main_header = new_header;
+    }
+
+    fn readColorTable(self: *Self, reader: *const std.io.AnyReader, table_size: u8, alloc: *std.mem.Allocator) !void {
+        const table_len = std.math.pow(u16, 2, table_size + 1);
+
+        const new_slice = try alloc.alloc(color.RGBColor, table_len);
+        for (0..new_slice.len) |index| {
+            new_slice[index] = try reader.readStruct(color.RGBColor);
+        }
+
+        self.global_colortable = new_slice;
     }
 };
 
 pub const GifDecoder = struct {
     const Self = @This();
+    const GifDecodingError = error{
+        InvalidByteFlag,
+    };
 
     reader: *const std.io.AnyReader,
     alloc: *std.mem.Allocator,
 
-    fn readColorTable(self: *const Self, table_size: u8) ![]RGBColor {
-        const table_len = std.math.pow(u16, 2, table_size + 1);
-
-        const new_slice = try self.alloc.alloc(RGBColor, table_len);
-        for (0..new_slice.len) |index| {
-            new_slice[index] = try self.reader.readStruct(RGBColor);
-        }
-
-        return new_slice;
-    }
-
-    fn readExtension(self: *const Self) !Extension {
-        const label = try self.reader.readByte();
-
-        var blocks = std.ArrayList([]u8).init(self.alloc.*);
-        defer blocks.deinit();
-
-        var data_size = try self.reader.readByte();
-        while (data_size != 0) : (data_size = try self.reader.readByte()) {
-            const slice = try self.alloc.alloc(u8, data_size);
-            if (try self.reader.read(slice) != data_size) {
-                self.alloc.free(slice);
-                blocks.deinit();
-                return error.UncompleteRead;
-            }
-
-            try blocks.append(slice);
-        }
-
-        return Extension {
-            .label = @enumFromInt(label),
-            .data = try blocks.toOwnedSlice(),
-        };
-    }
-
     pub fn decode(self: *const Self) !GifData {
-        var frames = std.ArrayList(ImageOrExt).init(self.alloc.*);
-        defer frames.deinit();
+        var data = GifData{};
 
-        var data = GifData {
-            .main_header = try self.reader.readStruct(GifHeader),
-        };
-
-        try data.validate();
+        try data.readHeader(self.reader);
 
         // if there is no global color table to be load then we can safely avoid
         // adding one to `data`
         if (data.main_header.ls_descriptor.getGctableFlag() != 0) {
             const table_size = data.main_header.ls_descriptor.getGcTableSize();
-            data.global_colortable = try self.readColorTable(table_size);
+            try data.readColorTable(self.reader, table_size, self.alloc);
         }
 
+        var extensions = std.ArrayList(ext.Extension).init(self.alloc.*);
+        defer extensions.deinit();
+
+        var frames = std.ArrayList(img.Image).init(self.alloc.*);
+        defer frames.deinit();
+
         for (0..3) |_| {
-            const flag: ImageOrExtType = @enumFromInt(try self.reader.readByte());
-            const new = switch (flag) {
-                .Ext => ImageOrExt{
-                    .Ext = try self.readExtension(),
+            const flag = try self.reader.readByte();
+            switch (flag) {
+                0x21 => {
+                    const new_ext = try ext.readExtension(self.reader, self.alloc);
+                    try extensions.append(new_ext);
                 },
 
-                .Image => ImageOrExt{
-                    .Image = try img.readImage(self.reader),
+                0x2c => {
+                    const new_frame = try img.readImage(self.reader);
+                    try frames.append(new_frame);
                 },
-            };
 
-            try frames.append(new);
+                else => return GifDecodingError.InvalidByteFlag,
+            }
         }
 
         if (frames.items.len != 0) {
             data.frames = try frames.toOwnedSlice();
         }
 
+        if (extensions.items.len != 0) {
+            data.extensions = try extensions.toOwnedSlice();
+        }
+
         return data;
     }
 
     pub fn init(reader: *const std.io.AnyReader, alloc: *std.mem.Allocator) !Self {
-        return Self {
+        return Self{
             .reader = reader,
             .alloc = alloc,
         };
