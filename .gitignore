@@ -1,0 +1,7 @@
+zig-out/
+.zig-cache/
+*.out
+*.o
+*.gif
+src/static/
+
