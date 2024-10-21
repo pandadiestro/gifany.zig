@@ -19,5 +19,14 @@ pub fn main() !void {
             data.frames.?[index],
         });
     }
+
+    std.debug.print("\n\n", .{});
+
+    for (0..data.extensions.?.len) |index| {
+        std.debug.print("extension #{}:\n    {}\n", .{
+            index,
+            data.extensions.?[index],
+        });
+    }
 }
 

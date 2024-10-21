@@ -106,7 +106,7 @@ pub const GifDecoder = struct {
         var frames = std.ArrayList(img.Image).init(self.alloc.*);
         defer frames.deinit();
 
-        for (0..3) |_| {
+        outloop: while (true) {
             const flag = try self.reader.readByte();
             switch (flag) {
                 0x21 => {
@@ -115,11 +115,12 @@ pub const GifDecoder = struct {
                 },
 
                 0x2c => {
-                    const new_frame = try img.readImage(self.reader);
+                    const new_frame = try img.readImage(self.reader, self.alloc);
                     try frames.append(new_frame);
                 },
 
-                else => return GifDecodingError.InvalidByteFlag,
+                0x3b => break :outloop,
+                else => return error.InvalidByteFlag
             }
         }
 

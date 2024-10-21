@@ -1,4 +1,5 @@
 const std = @import("std");
+const block = @import("block.zig");
 
 pub const ExtType = enum(u8) {
     Graphic = 0xf9,
@@ -14,25 +15,11 @@ pub const Extension = struct {
 
 pub fn readExtension(reader: *const std.io.AnyReader, alloc: *std.mem.Allocator) !Extension {
     const label = try reader.readByte();
-
-    var blocks = std.ArrayList([]u8).init(alloc.*);
-    defer blocks.deinit();
-
-    var data_size = try reader.readByte();
-    while (data_size != 0) : (data_size = try reader.readByte()) {
-        const slice = try alloc.alloc(u8, data_size);
-        if (try reader.read(slice) != data_size) {
-            alloc.free(slice);
-            blocks.deinit();
-            return error.UncompleteRead;
-        }
-
-        try blocks.append(slice);
-    }
+    const data = try block.readBlocks(reader, alloc);
 
     return Extension {
         .label = @enumFromInt(label),
-        .data = try blocks.toOwnedSlice(),
+        .data = data,
     };
 }
 
