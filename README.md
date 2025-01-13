@@ -6,6 +6,12 @@
 
 *a fully 87a and 89a-compatible zig gif decoding library*
 
+## To-Do
+
+- Add proper animation-wise metadata
+- Add proper transparency-wise metadata
+- Add frame decompression utilities (lzw -> bmp/png/webp/jpegxl/...)
+
 </div>
 
 

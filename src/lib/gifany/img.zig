@@ -14,7 +14,7 @@ const ImageDescriptor = extern struct {
 
 const LZWData = struct {
     min_codesize: u8 = 0x00,
-    raw_data: [][]u8 = undefined,
+    raw_data: ?[]u8 = null,
 };
 
 pub const Image = struct {
@@ -30,11 +30,11 @@ pub const Image = struct {
 };
 
 pub fn readImage(reader: *const std.io.AnyReader, alloc: *std.mem.Allocator) !Image {
-    const new_image = Image {
+    const new_image = Image{
         .descriptor = try reader.readStruct(ImageDescriptor),
         .img_data = .{
             .min_codesize = try reader.readByte(),
-            .raw_data = try block.readBlocks(reader, alloc),
+            .raw_data = try block.readBlocksMerge(reader, alloc),
         }
     };
 
