@@ -22,18 +22,18 @@ pub fn build(b: *std.Build) void {
 
     const exe = b.addExecutable(.{
         .name = "gifany",
-        .root_source_file = b.path("src/examples/print_frames.zig"),
+        .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
 
-    const giffany_module = b.addModule("gifany", .{
-        .root_source_file = b.path("./src/lib/gifany/gif.zig"),
+    const libgifany_module = b.createModule(.{
+        .root_source_file = b.path("libgifany/libgifany.zig"),
         .target = target,
         .optimize = optimize,
     });
 
-    exe.root_module.addImport("gifany", giffany_module);
+    exe.root_module.addImport("libgifany", libgifany_module);
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
@@ -42,12 +42,12 @@ pub fn build(b: *std.Build) void {
 
     const exe_check = b.addExecutable(.{
         .name = "gifany",
-        .root_source_file = b.path("src/examples/print_frames.zig"),
+        .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
 
-    exe_check.root_module.addImport("gifany", giffany_module);
+    exe_check.root_module.addImport("libgifany", libgifany_module);
 
     const check = b.step("check", "Check if foo compiles");
     check.dependOn(&exe_check.step);
