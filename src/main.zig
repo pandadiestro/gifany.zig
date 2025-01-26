@@ -39,7 +39,7 @@ pub fn main() !void {
     const frame_size: usize = @as(usize, frame.descriptor.image_height) * @as(usize, frame.descriptor.image_width);
     std.debug.assert(frame_size <= 400*400);
 
-    //std.debug.print("frame #{}\n", .{ index });
+    const end_time = std.time.milliTimestamp();
 
     for (0..frame.descriptor.image_height) |h_index| {
         for (0..frame.descriptor.image_width) |w_index| {
@@ -50,15 +50,12 @@ pub fn main() !void {
         std.debug.print("\n", .{});
     }
 
+    std.debug.print("traversal took {}ms\n", .{ end_time - start_time });
     //while (new_decoder.nextFrame()) |*frame| : (index += 1) {
-//
     //} else |err| {
     //    if (err != libgifany.DecodeError.EndOfIteration) return err;
     //}
 
-    const end_time = std.time.milliTimestamp();
-
-    std.debug.print("traversal took {}ms\n", .{ end_time - start_time });
 }
 
 

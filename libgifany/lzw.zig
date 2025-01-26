@@ -116,16 +116,21 @@ pub fn decodeStream(stream: *BitStream(u16), min_codesize: u8, color_table: *con
     const eot_code = clear_code + 1;
 
     const code_table_size = 1 << 12;
-    var code_table = try std.BoundedArray([]u16, code_table_size).init(0);
+    var code_table: [code_table_size][]u16 = undefined;
+    var code_table_offset: usize = 0x00;
 
     for (0..color_table.len) |color_index| {
         var mem = try allocator.alloc(u16, 1);
         mem[0] = @intCast(color_index);
-        try code_table.append(mem);
+        code_table[code_table_offset] = mem;
+        code_table_offset += 1;
     }
 
-    try code_table.append(@constCast(&[_]u16{ clear_code }));
-    try code_table.append(@constCast(&[_]u16{ eot_code }));
+    code_table[code_table_offset] = (@constCast(&[_]u16{ clear_code }));
+    code_table_offset += 1;
+
+    code_table[code_table_offset] = (@constCast(&[_]u16{ eot_code }));
+    code_table_offset += 1;
 
     var color_buffer_offset: usize = 0;
 
@@ -137,31 +142,27 @@ pub fn decodeStream(stream: *BitStream(u16), min_codesize: u8, color_table: *con
 
     while (true) {
         const code_index = try stream.readBits(read_length);
-
-        std.debug.print("(read of {}) code_index: {}\n", .{
-            read_length,
-            code_index,
-        });
-
         if (code_index == eot_code) {
             return;
         }
 
         if (code_index == clear_code) {
-            try code_table.resize(color_table.len + 2);
+            code_table_offset = clear_code + 2;
             read_length = min_codesize + 1;
+
             const new_first_code = try stream.readBits(read_length);
             color_buffer.*[color_buffer_offset] = color_table.*[new_first_code];
             color_buffer_offset += 1;
+
             last_code = new_first_code;
             continue;
         }
 
-        const last_code_entry = code_table.get(last_code);
+        const last_code_entry = code_table[last_code];
 
         const k: u16 = k_blk: {
-            if (code_index < code_table.len) {
-                const code_entry = code_table.get(code_index);
+            if (code_index < code_table_offset) {
+                const code_entry = code_table[code_index];
                 const new_k = code_entry[0];
 
                 for (code_entry) |code_entry_el| {
@@ -189,11 +190,12 @@ pub fn decodeStream(stream: *BitStream(u16), min_codesize: u8, color_table: *con
         @memcpy(new_codetable_entry[0..last_code_entry.len], last_code_entry);
         new_codetable_entry[new_codetable_entry.len - 1] = k;
 
-        try code_table.append(new_codetable_entry);
+        code_table[code_table_offset] = (new_codetable_entry);
+        code_table_offset += 1;
 
         last_code = code_index;
 
-        if (code_table.len >= (@as(usize, 1) << @intCast(read_length))) {
+        if (code_table_offset >= (@as(usize, 1) << @intCast(read_length))) {
             read_length += 1;
         }
     }
